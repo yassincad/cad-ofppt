@@ -1,37 +1,68 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
 const app = express();
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '10mb' }));
 
-// إعداد التخزين للصور (الملفات الشخصية، صور المهارات)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = './uploads';
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
-});
+// التخزين في الذاكرة المؤقتة لمنع خطأ الكتابة في Vercel
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// قواعد بيانات وهمية للتبسيط (يمكن ربطها بـ MongoDB أو PostgreSQL لاحقاً)
-let db = {
-  users: [],       // المتدربون المسجلون
-  complaints: [],  // الشكايات
-  announcements: [], // إعلانات المشرفين
-  competitions: [],  // المسابقات والنتائج
-  starOfTheMonth: null // نجم الشهر
-};
+// الاتصال بقاعدة البيانات
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://username:password@cluster.mongodb.net/cad_ofppt?retryWrites=true&w=majority";
 
-// صفحة الترحيب والقوانين والخاناعات الرئيسية
-app.get('/', (req, res) => {
+mongoose.connect(MONGO_URI)
+  .then(() => console.log("Connected to MongoDB successfully"))
+  .catch(err => console.error("MongoDB connection error:", err));
+
+// تعريف النماذج (Models)
+const UserSchema = new mongoose.Schema({
+  fullname: String,
+  cin: { type: String, unique: true },
+  pnj: String, // تخزين الصورة بترميز Base64
+  group: String,
+  password: String,
+  status: { type: String, default: 'pending' },
+  rank: { type: String, default: 'C' },
+  skills: [String],
+  languages: [String],
+  skillImage: String
+});
+
+const ComplaintSchema = new mongoose.Schema({
+  senderName: String,
+  senderCin: String,
+  group: String,
+  text: String,
+  date: { type: Date, default: Date.now }
+});
+
+const AnnouncementSchema = new mongoose.Schema({
+  text: String,
+  image: String,
+  date: { type: Date, default: Date.now }
+});
+
+const CompetitionSchema = new mongoose.Schema({
+  title: String,
+  result: String
+});
+
+const SettingsSchema = new mongoose.Schema({
+  key: String,
+  value: String
+});
+
+const User = mongoose.model('User', UserSchema);
+const Complaint = mongoose.model('Complaint', ComplaintSchema);
+const Announcement = mongoose.model('Announcement', AnnouncementSchema);
+const Competition = mongoose.model('Competition', CompetitionSchema);
+const Settings = mongoose.model('Settings', SettingsSchema);
+
+// الصفحة الرئيسية
+app.get('/', async (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -42,8 +73,8 @@ app.get('/', (req, res) => {
             body { font-family: Tahoma, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; text-align: center; }
             .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
             h1 { color: #004d40; }
-            .btn-group { margin: 30px 0; display: flex; justify-content: center; gap: 20px; }
-            .btn { background: #00796b; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; transition: 0.3s; }
+            .btn-group { margin: 30px 0; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+            .btn { background: #00796b; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; }
             .btn:hover { background: #004d40; }
             .rules { text-align: right; background: #e0f2f1; padding: 15px; border-radius: 5px; margin-top: 20px; }
         </style>
@@ -51,20 +82,18 @@ app.get('/', (req, res) => {
     <body>
         <div class="container">
             <h1>لجنة الانضباط الذاتية (CAD) - OFPPT</h1>
-            <p>مرحباً بك في المنصة الرسمية لتعزيز الانضباط، الالتزام، وتطوير مهارات المتدربين.</p>
-            
+            <p>المنصة الرسمية لتعزيز الانضباط، الالتزام، وتطوير مهارات المتدربين.</p>
             <div class="btn-group">
                 <a href="/register" class="btn">تسجيل جديد</a>
                 <a href="/login" class="btn">تسجيل الدخول</a>
                 <a href="/admin-login" class="btn" style="background: #c62828;">صفحة المشرفين</a>
             </div>
-
             <div class="rules">
                 <h3>قوانين ومعايير المؤسسة:</h3>
                 <ul>
-                    <li>احترام وقفات وحرمة المؤسسة والتوقيت الإداري.</li>
+                    <li>احترام الأوقات وحرمة المؤسسة والتوقيت الإداري.</li>
                     <li>التحلي بالأخلاق الحسنة والتعاون الإيجابي بين المتدربين.</li>
-                    <li>المشاركة الفعالة في الأنشطة والمسابقات الرسمية.</li>
+                    <li>المشاركة الفعالة في الأنشطة والمسابقات الرسمية للجنة.</li>
                 </ul>
             </div>
         </div>
@@ -73,13 +102,13 @@ app.get('/', (req, res) => {
   `);
 });
 
-// صفحة التسجيل الجديد
+// صفحة التسجيل
 app.get('/register', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
     <head><meta charset="UTF-8"><title>تسجيل جديد</title>
-    <style>body{font-family:Tahoma;background:#f4f7f6;padding:20px;text-align:center;} form{background:white;max-width:500px;margin:auto;padding:20px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);text-align:right;} input, select{width:100%;padding:10px;margin:10px 0;border:1px solid #ccc;border-radius:4px;} button{background:#00796b;color:white;padding:10px;border:none;width:100%;border-radius:4px;font-weight:bold;cursor:pointer;}</style>
+    <style>body{font-family:Tahoma;background:#f4f7f6;padding:20px;text-align:center;} form{background:white;max-width:500px;margin:auto;padding:20px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);text-align:right;} input{width:100%;padding:10px;margin:10px 0;border:1px solid #ccc;border-radius:4px;} button{background:#00796b;color:white;padding:10px;border:none;width:100%;border-radius:4px;font-weight:bold;cursor:pointer;}</style>
     </head>
     <body>
         <form action="/register" method="POST" enctype="multipart/form-data">
@@ -88,39 +117,44 @@ app.get('/register', (req, res) => {
             <input type="text" name="fullname" required>
             <label>رقم بطاقة التعريف الوطنية (CIN):</label>
             <input type="text" name="cin" required>
-            <label>رقم مسار أو صورة البطاقة (PNJ):</label>
-            <input type="file" name="pnj" required>
+            <label>صورة بطاقة التعريف أو مسار (PNJ):</label>
+            <input type="file" name="pnj" accept="image/*" required>
             <label>القسم / الشعبة:</label>
             <input type="text" name="group" required>
             <label>كلمة المرور:</label>
             <input type="password" name="password" required>
             <button type="submit">إرسال طلب التسجيل</button>
-            <p><a href="/">العودة للرئيسية</a></p>
+            <p style="text-align:center; margin-top:15px;"><a href="/">العودة للرئيسية</a></p>
         </form>
     </body>
     </html>
   `);
 });
 
-app.post('/register', upload.single('pnj'), (req, res) => {
-  const { fullname, cin, group, password } = req.body;
-  db.users.push({
-    id: Date.now(),
-    fullname,
-    cin,
-    pnj: req.file ? req.file.path : '',
-    group,
-    password,
-    status: 'pending', // قيد الانتظار لحين قبول المشرف
-    rank: 'C', // الرتبة الافتراضية
-    skills: [],
-    languages: [],
-    skillImage: ''
-  });
-  res.send(`<script>alert('تم إرسال طلبك بنجاح، في انتظار مراجعته من طرف المشرفين.'); window.location.href='/';</script>`);
+app.post('/register', upload.single('pnj'), async (req, res) => {
+  try {
+    const { fullname, cin, group, password } = req.body;
+    let imgBase64 = '';
+    if (req.file) {
+      imgBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    }
+
+    const newUser = new User({
+      fullname,
+      cin,
+      pnj: imgBase64,
+      group,
+      password
+    });
+    await newUser.save();
+    res.send(`<script>alert('تم إرسال طلبك بنجاح، في انتظار مراجعته من طرف المشرفين.'); window.location.href='/';</script>`);
+  } catch (err) {
+    console.error(err);
+    res.send(`<script>alert('خطأ: تعذر التسجيل، يرجى التأكد من عدم تكرار رقم CIN.'); window.location.href='/register';</script>`);
+  }
 });
 
-// صفحة تسجيل الدخول للمتدربين
+// تسجيل الدخول
 app.get('/login', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -136,37 +170,37 @@ app.get('/login', (req, res) => {
             <label>كلمة المرور:</label>
             <input type="password" name="password" required>
             <button type="submit">دخول</button>
-            <p><a href="/">العودة للرئيسية</a></p>
+            <p style="text-align:center; margin-top:15px;"><a href="/">العودة للرئيسية</a></p>
         </form>
     </body>
     </html>
   `);
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
   const { cin, password } = req.body;
-  const user = db.users.find(u => u.cin === cin && u.password === password);
+  const user = await User.findOne({ cin, password });
   
   if (!user) {
-    return res.send(`<script>alert('بيانات غير صحيحة!'); window.location.href='/login';</script>`);
+    return res.send(`<script>alert('بيانات الدخول غير صحيحة!'); window.location.href='/login';</script>`);
   }
   if (user.status !== 'accepted') {
     return res.send(`<script>alert('حسابك لم يتم قبوله بعد من طرف المشرفين.'); window.location.href='/';</script>`);
   }
 
-  // توجيه المتدرب لصفحته الشخصية
   res.redirect(`/profile?cin=${cin}`);
 });
 
-// لوحة تحكم المتدرب الشخصية
-app.get('/profile', (req, res) => {
+// الملف الشخصي
+app.get('/profile', async (req, res) => {
   const { cin } = req.query;
-  const user = db.users.find(u => u.cin === cin);
+  const user = await User.findOne({ cin });
   if (!user) return res.redirect('/login');
 
-  // جلب أحدث إعلان للمشرفين لعرضه في المستطيل العلوي
-  const latestAnnouncement = db.announcements[db.announcements.length - 1] || { text: "لا توجد إعلانات جديدة حالياً.", image: "" };
-  const isStar = db.starOfTheMonth && db.starOfTheMonth.cin === user.cin;
+  const latestAnnouncement = await Announcement.findOne().sort({ date: -1 }) || { text: "لا توجد إعلانات جديدة حالياً.", image: "" };
+  const starSetting = await Settings.findOne({ key: 'starOfTheMonth' });
+  const isStar = starSetting && starSetting.value === user.cin;
+  const competitions = await Competition.find();
 
   res.send(`
     <!DOCTYPE html>
@@ -176,7 +210,7 @@ app.get('/profile', (req, res) => {
         body{font-family:Tahoma;background:#f4f7f6;margin:0;padding:20px;}
         .announcement-bar{background:#ffeb3b;color:#f57f17;padding:15px;border-radius:5px;text-align:center;font-weight:bold;margin-bottom:20px;border:1px solid #fbc02d;}
         .container{background:white;max-width:800px;margin:auto;padding:20px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
-        .badge{background:#4caf50;color:white;padding:5px 10px;border-radius:15px;display:inline-block;font-size:14px;}
+        .badge{background:#4caf50;color:white;padding:8px 15px;border-radius:20px;display:inline-block;font-size:15px;margin-top:10px;}
         .section{margin-top:20px;padding:15px;background:#e0f2f1;border-radius:5px;}
         input, textarea{width:100%;padding:8px;margin:8px 0;border:1px solid #ccc;border-radius:4px;}
         button{background:#00796b;color:white;padding:10px 15px;border:none;border-radius:4px;cursor:pointer;}
@@ -185,41 +219,41 @@ app.get('/profile', (req, res) => {
     <body>
         <div class="announcement-bar">
             📢 إعلان اللجنة: ${latestAnnouncement.text}
-            ${latestAnnouncement.image ? `<br><img src="/${latestAnnouncement.image}" width="150" style="margin-top:10px;border-radius:5px;">` : ''}
+            ${latestAnnouncement.image ? `<br><img src="${latestAnnouncement.image}" width="200" style="margin-top:10px;border-radius:5px;">` : ''}
         </div>
 
         <div class="container">
             <h2>مرحباً، ${user.fullname}</h2>
             <p><strong>القسم:</strong> ${user.group} | <strong>الرتبة الانضباطية:</strong> <span style="color:red; font-weight:bold;">${user.rank}</span></p>
-            ${isStar ? '<div class="badge">🌟 مبروك! لقد تم اختيارك نجم الشهر من طرف لجنة الانضباط الذاتية!</div>' : ''}
+            ${isStar ? '<div class="badge">🌟 مبارك! تم اختيارك "نجم الشهر" من طرف لجنة الانضباط الذاتية مع بادج معتمد.</div>' : ''}
 
             <div class="section">
-                <h3>ملفك الشخصي وإضافة المهارات واللغات</h3>
+                <h3>ملفك الشخصي (إضافة المهارات واللغات)</h3>
                 <form action="/update-profile" method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="cin" value="${user.cin}">
                     <label>المهارات (افصل بينها بفواصل):</label>
                     <input type="text" name="skills" value="${user.skills.join(', ')}">
                     <label>اللغات المتقنة:</label>
                     <input type="text" name="languages" value="${user.languages.join(', ')}">
-                    <label>إرسال صورة المهارة / الإنجاز:</label>
-                    <input type="file" name="skillImage">
+                    <label>إرسال صورة إثبات المهارة / العمل:</label>
+                    <input type="file" name="skillImage" accept="image/*">
                     <button type="submit">تحديث الملف</button>
                 </form>
             </div>
 
             <div class="section">
-                <h3>وضع شكاية للجنة الانضباط</h3>
+                <h3>وضع شكاية أو ملاحظة للجنة</h3>
                 <form action="/add-complaint" method="POST">
                     <input type="hidden" name="cin" value="${user.cin}">
-                    <textarea name="complaintText" placeholder="اكتب شكايتك أو ملاحظتك هنا بخصوص ظروف التدريب..." required></textarea>
+                    <textarea name="complaintText" placeholder="اكتب شكايتك بخصوص ظروف التكوين..." required></textarea>
                     <button type="submit">إرسال الشكاية</button>
                 </form>
             </div>
 
             <div class="section">
-                <h3>ركن المسابقات</h3>
+                <h3>ركن المسابقات والنتائج</h3>
                 <ul>
-                    ${db.competitions.map(c => `<li><b>${c.title}</b> - النتيجة: ${c.result || 'جارٍ التنافس...'}</li>`).join('')}
+                    ${competitions.map(c => `<li><b>${c.title}</b> - النتيجة: ${c.result || 'قيد المنافسة'}</li>`).join('')}
                 </ul>
             </div>
 
@@ -230,33 +264,35 @@ app.get('/profile', (req, res) => {
   `);
 });
 
-app.post('/update-profile', upload.single('skillImage'), (req, res) => {
+app.post('/update-profile', upload.single('skillImage'), async (req, res) => {
   const { cin, skills, languages } = req.body;
-  const user = db.users.find(u => u.cin === cin);
-  if (user) {
-    user.skills = skills.split(',').map(s => s.trim());
-    user.languages = languages.split(',').map(l => l.trim());
-    if (req.file) user.skillImage = req.file.path;
+  const updateData = {
+    skills: skills ? skills.split(',').map(s => s.trim()) : [],
+    languages: languages ? languages.split(',').map(l => l.trim()) : []
+  };
+  if (req.file) {
+    updateData.skillImage = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
   }
+
+  await User.findOneAndUpdate({ cin }, updateData);
   res.redirect(`/profile?cin=${cin}`);
 });
 
-app.post('/add-complaint', (req, res) => {
+app.post('/add-complaint', async (req, res) => {
   const { cin, complaintText } = req.body;
-  const user = db.users.find(u => u.cin === cin);
+  const user = await User.findOne({ cin });
   if (user) {
-    db.complaints.push({
-      id: Date.now(),
+    await Complaint.create({
       senderName: user.fullname,
       senderCin: user.cin,
       group: user.group,
       text: complaintText
     });
   }
-  res.send(`<script>alert('تم إرسال شكايتك بنجاح إلى لجنة الانضباط.'); window.location.href='/profile?cin=${cin}';</script>`);
+  res.send(`<script>alert('تم إرسال شكايتك بنجاح.'); window.location.href='/profile?cin=${cin}';</script>`);
 });
 
-// صفحة تسجيل دخول المشرفين
+// المشرفين
 app.get('/admin-login', (req, res) => {
   res.send(`
     <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>دخول المشرفين</title>
@@ -268,19 +304,22 @@ app.get('/admin-login', (req, res) => {
             <label>كلمة مرور المشرفين:</label>
             <input type="password" name="adminPass" required>
             <button type="submit">دخول لوحة التحكم</button>
-            <p><a href="/">العودة للرئيسية</a></p>
+            <p style="text-align:center; margin-top:15px;"><a href="/">العودة للرئيسية</a></p>
         </form>
     </body>
     </html>
   `);
 });
 
-// لوحة تحكم المشرفين المتكاملة
-app.post('/admin-dashboard', (req, res) => {
+app.post('/admin-dashboard', async (req, res) => {
   const { adminPass } = req.body;
-  if (adminPass !== 'cad2026') { // كلمة المرور الافتراضية للمشرفين
-    return res.send(`<script>alert('كلمة مرور المشرفين غير صحيحة!'); window.location.href='/admin-login';</script>`);
+  if (adminPass !== 'cad2026') {
+    return res.send(`<script>alert('كلمة المرور غير صحيحة!'); window.location.href='/admin-login';</script>`);
   }
+
+  const users = await User.find();
+  const complaints = await Complaint.find().sort({ date: -1 });
+  const competitions = await Competition.find();
 
   res.send(`
     <!DOCTYPE html>
@@ -288,71 +327,69 @@ app.post('/admin-dashboard', (req, res) => {
     <head><meta charset="UTF-8"><title>لوحة تحكم المشرفين - CAD</title>
     <style>
         body{font-family:Tahoma;background:#f4f7f6;margin:0;padding:20px;}
-        .container{background:white;max-width:1000px;margin:auto;padding:20px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+        .container{background:white;max-width:1100px;margin:auto;padding:20px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
         .section{margin-top:25px;padding:15px;background:#f9f9f9;border:1px solid #ddd;border-radius:5px;}
         table{width:100%;border-collapse:collapse;margin-top:10px;}
-        th, td{border:1px solid #ccc;padding:8px;text-align:center;}
+        th, td{border:1px solid #ccc;padding:8px;text-align:center;font-size:14px;}
         th{background:#00796b;color:white;}
         input, textarea, select{width:100%;padding:8px;margin:5px 0;border:1px solid #ccc;border-radius:4px;}
-        button{background:#00796b;color:white;padding:8px 15px;border:none;border-radius:4px;cursor:pointer;}
+        button{background:#00796b;color:white;padding:8px 12px;border:none;border-radius:4px;cursor:pointer;}
     </style>
     </head>
     <body>
         <div class="container">
-            <h2>لوحة تحكم أعضاء لجنة الانضباط الذاتية (CAD)</h2>
+            <h2>لوحة تحكم لجنة الانضباط الذاتية (CAD)</h2>
             
-            <!-- إدارة الإعلانات -->
             <div class="section">
                 <h3>نشر إعلان جديد للمتدربين</h3>
                 <form action="/admin/add-announcement" method="POST" enctype="multipart/form-data">
-                    <textarea name="text" placeholder="اكتب نص الإعلان..." required></textarea>
-                    <label>صورة إضافية للإعلان (اختياري):</label>
-                    <input type="file" name="annImage">
+                    <textarea name="text" placeholder="اكتب نص الإعلان التوجيهي..." required></textarea>
+                    <label>صورة إضافية للإعلان:</label>
+                    <input type="file" name="annImage" accept="image/*">
                     <button type="submit">نشر الإعلان</button>
                 </form>
             </div>
 
-            <!-- اختيار نجم الشهر -->
             <div class="section">
-                <h3>اختيار نجم الشهر (منح Badge)</h3>
+                <h3>اختيار نجم الشهر (منح البادج)</h3>
                 <form action="/admin/set-star" method="POST">
                     <select name="cin">
-                        ${db.users.filter(u => u.status === 'accepted').map(u => `<option value="${u.cin}">${u.fullname} (${u.group})</option>`).join('')}
+                        ${users.filter(u => u.status === 'accepted').map(u => `<option value="${u.cin}">${u.fullname} (${u.group})</option>`).join('')}
                     </select>
-                    <button type="submit">تعيين كـ نجم الشهر وتفعيل البادج</button>
+                    <button type="submit">تحديد كـ نجم الشهر</button>
                 </form>
             </div>
 
-            <!-- إدارة المسابقات والنتائج -->
             <div class="section">
-                <h3>إدارة المسابقات وإعلان النتائج</h3>
+                <h3>إدارة المسابقات والنتائج</h3>
                 <form action="/admin/add-competition" method="POST">
-                    <input type="text" name="title" placeholder="عنوان المسابقة..." required>
-                    <input type="text" name="result" placeholder="النتيجة أو المتسابق الفائز..." required>
-                    <button type="submit">حفظ المسابقة وتحديث النتيجة</button>
+                    <input type="text" name="title" placeholder="اسم المسابقة / التحدي" required>
+                    <input type="text" name="result" placeholder="نتيجة أو اسم الفائز" required>
+                    <button type="submit">إضافة / تحديث المسابقة</button>
                 </form>
             </div>
 
-            <!-- قبول أو رفض المتسجلين وتحديد الرتب (A, B, C, D) -->
             <div class="section">
-                <h3>طلبات التسجيل وإدارة المتدربين والرتب</h3>
+                <h3>إدارة المتدربين والقبول والتصنيف (A - B - C - D)</h3>
                 <table>
                     <tr>
                         <th>الإسم والنسب</th>
                         <th>الشعبة</th>
-                        <th>بطاقة PNJ</th>
+                        <th>صورة البطاقة</th>
+                        <th>المهارات</th>
                         <th>الحالة</th>
                         <th>الرتبة</th>
-                        <th>الإجراء</th>
+                        <th>إجراءات</th>
                     </tr>
-                    ${db.users.map(u => `
+                    ${users.map(u => `
                         <tr>
-                            <td>${u.fullname}</td>
+                            <td>${u.fullname}<br><small>${u.cin}</small></td>
                             <td>${u.group}</td>
-                            <td>${u.pnj ? `<a href="/${u.pnj}" target="_blank">عرض البطاقة</a>` : 'لا توجد'}</td>
+                            <td>${u.pnj ? `<img src="${u.pnj}" width="80" style="border-radius:4px;">` : 'لا توجد'}</td>
+                            <td>${u.skills.join(', ')} <br>${u.skillImage ? `<img src="${u.skillImage}" width="60">` : ''}</td>
                             <td>${u.status === 'pending' ? 'قيد الانتظار' : 'مقبول'}</td>
                             <td>
-                                <form action="/admin/update-rank" method="POST" style="display:inline;">
+                                <form action="/admin/update-rank" method="POST">
                                     <input type="hidden" name="cin" value="${u.cin}">
                                     <select name="rank" onchange="this.form.submit()">
                                         <option value="A" ${u.rank==='A'?'selected':''}>A</option>
@@ -363,7 +400,7 @@ app.post('/admin-dashboard', (req, res) => {
                                 </form>
                             </td>
                             <td>
-                                ${u.status === 'pending' ? `<a href="/admin/accept?cin=${u.cin}"><button style="background:green;">قبول</button></a>` : ''}
+                                ${u.status === 'pending' ? `<a href="/admin/accept?cin=${u.cin}"><button style="background:green; margin-bottom:5px;">قبول</button></a>` : ''}
                                 <a href="/admin/delete?cin=${u.cin}"><button style="background:red;">حذف</button></a>
                             </td>
                         </tr>
@@ -371,20 +408,21 @@ app.post('/admin-dashboard', (req, res) => {
                 </table>
             </div>
 
-            <!-- الاطلاع على الشكايات -->
             <div class="section">
-                <h3>شكايات المتدربين</h3>
+                <h3>شكايات المتدربين الواردة</h3>
                 <table>
                     <tr>
                         <th>المشتكي</th>
                         <th>القسم</th>
-                        <th>الشكاية</th>
+                        <th>نص الشكاية</th>
+                        <th>التاريخ</th>
                     </tr>
-                    ${db.complaints.map(c => `
+                    ${complaints.map(c => `
                         <tr>
-                            <td>${c.senderName} (CIN:${c.senderCin})</td>
+                            <td>${c.senderName} (${c.senderCin})</td>
                             <td>${c.group}</td>
                             <td>${c.text}</td>
+                            <td>${new Date(c.date).toLocaleDateString('ar-MA')}</td>
                         </tr>
                     `).join('')}
                 </table>
@@ -397,50 +435,49 @@ app.post('/admin-dashboard', (req, res) => {
   `);
 });
 
-// المسارات الخاصة بالمشرفين
-app.post('/admin/add-announcement', upload.single('annImage'), (req, res) => {
-  const { text } = req.body;
-  db.announcements.push({
-    text,
-    image: req.file ? req.file.path : ''
+app.post('/admin/add-announcement', upload.single('annImage'), async (req, res) => {
+  let imgBase64 = '';
+  if (req.file) {
+    imgBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+  }
+  await Announcement.create({
+    text: req.body.text,
+    image: imgBase64
   });
-  res.redirect('/admin-login'); // ملاحظة: يفضل تمرير الباسورد أو الحفاظ على الجلسة، وللتبسيط نعيد توجيههم
-});
-
-app.post('/admin/set-star', (req, res) => {
-  const { cin } = req.body;
-  const user = db.users.find(u => u.cin === cin);
-  if (user) db.starOfTheMonth = user;
   res.redirect('/admin-login');
 });
 
-app.post('/admin/add-competition', (req, res) => {
-  const { title, result } = req.body;
-  db.competitions.push({ title, result });
+app.post('/admin/set-star', async (req, res) => {
+  await Settings.findOneAndUpdate(
+    { key: 'starOfTheMonth' },
+    { value: req.body.cin },
+    { upsert: true }
+  );
   res.redirect('/admin-login');
 });
 
-app.post('/admin/update-rank', (req, res) => {
-  const { cin, rank } = req.body;
-  const user = db.users.find(u => u.cin === cin);
-  if (user) user.rank = rank;
+app.post('/admin/add-competition', async (req, res) => {
+  await Competition.create({
+    title: req.body.title,
+    result: req.body.result
+  });
   res.redirect('/admin-login');
 });
 
-app.get('/admin/accept', (req, res) => {
-  const { cin } = req.query;
-  const user = db.users.find(u => u.cin === cin);
-  if (user) user.status = 'accepted';
+app.post('/admin/update-rank', async (req, res) => {
+  await User.findOneAndUpdate({ cin: req.body.cin }, { rank: req.body.rank });
   res.redirect('/admin-login');
 });
 
-app.get('/admin/delete', (req, res) => {
-  const { cin } = req.query;
-  db.users = db.users.filter(u => u.cin !== cin);
+app.get('/admin/accept', async (req, res) => {
+  await User.findOneAndUpdate({ cin: req.query.cin }, { status: 'accepted' });
+  res.redirect('/admin-login');
+});
+
+app.get('/admin/delete', async (req, res) => {
+  await User.findOneAndDelete({ cin: req.query.cin });
   res.redirect('/admin-login');
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
