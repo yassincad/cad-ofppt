@@ -1,133 +1,152 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer');
+const { v2: cloudinary } = require('cloudinary');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const path = require('path');
 
 const app = express();
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-// التخزين المؤقت لمنع أخطاء الكتابة في Vercel
-const storage = multer.memoryStorage();
+// 1. إعدادات الاتصال بقاعدة بيانات MongoDB
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/cad_ofppt';
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('✅ تم الاتصال بقاعدة بيانات MongoDB بنجاح'))
+  .catch(err => console.error('❌ خطأ في الاتصال بـ MongoDB:', err));
+
+// 2. إعدادات Cloudinary (يمكنك استبدالها بمعلومات حسابك من لوحة تحكم Cloudinary)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'scgacjvy', // اسم الحساب الظاهر في الصورة لديك
+  api_key: process.env.CLOUDINARY_API_KEY || 'YOUR_API_KEY',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'YOUR_API_SECRET'
+});
+
+// إعداد التخزين السحابي لـ Multer عبر Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'cad_ofppt_uploads', // اسم المجلد داخل حسابك في Cloudinary
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
+  },
+});
 const upload = multer({ storage: storage });
 
-// الاتصال بقاعدة البيانات
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://username:password@cluster.mongodb.net/cad_ofppt?retryWrites=true&w=majority";
-
-mongoose.connect(MONGO_URI)
-  .then(() => console.log("Connected to MongoDB successfully"))
-  .catch(err => console.error("MongoDB connection error:", err));
-
-// الموديلات (Schemas)
-const UserSchema = new mongoose.Schema({
-  fullname: String,
-  cin: { type: String, unique: true },
-  pnj: String,         // بطاقة مسار/التعريف
-  avatar: String,      // الصورة الشخصية
-  group: String,
-  password: String,
+// تعريف Schemas ونماذج البيانات (Models)
+const userSchema = new mongoose.Schema({
+  fullname: { type: String, required: true },
+  cin: { type: String, required: true, unique: true, uppercase: true },
+  pnj: { type: String, required: true }, // رابط الصورة المباشر من Cloudinary
+  group: { type: String, required: true },
+  password: { type: String, required: true },
   status: { type: String, default: 'pending' },
   rank: { type: String, default: 'C' },
   skills: [String],
   languages: [String],
-  skillImage: String
+  skillImage: { type: String, default: '' }
 });
 
-const ComplaintSchema = new mongoose.Schema({
+const complaintSchema = new mongoose.Schema({
   senderName: String,
   senderCin: String,
   group: String,
   text: String,
-  status: { type: String, default: 'قيد الدراسة' }, // قيد الدراسة أو تمت المعالجة
-  response: { type: String, default: '' },
   date: { type: Date, default: Date.now }
 });
 
-const AnnouncementSchema = new mongoose.Schema({
+const announcementSchema = new mongoose.Schema({
   text: String,
   image: String,
   date: { type: Date, default: Date.now }
 });
 
-const CompetitionSchema = new mongoose.Schema({
+const competitionSchema = new mongoose.Schema({
   title: String,
   result: String
 });
 
-const SettingsSchema = new mongoose.Schema({
+const settingsSchema = new mongoose.Schema({
   key: String,
-  value: String
+  starCin: String
 });
 
-const User = mongoose.model('User', UserSchema);
-const Complaint = mongoose.model('Complaint', ComplaintSchema);
-const Announcement = mongoose.model('Announcement', AnnouncementSchema);
-const Competition = mongoose.model('Competition', CompetitionSchema);
-const Settings = mongoose.model('Settings', SettingsSchema);
+const User = mongoose.model('User', userSchema);
+const Complaint = mongoose.model('Complaint', complaintSchema);
+const Announcement = mongoose.model('Announcement', announcementSchema);
+const Competition = mongoose.model('Competition', competitionSchema);
+const Settings = mongoose.model('Settings', settingsSchema);
 
-// الأنماط المشتركة CSS
+// تنسيقات CSS الموحدة للتطبيق
 const commonCSS = `
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #004d40;
-      --primary-light: #00796b;
-      --secondary: #ffb300;
-      --bg: #f4f7f6;
+      --primary: #1a365d;
+      --primary-light: #2b6cb0;
+      --accent: #0D9488;
+      --bg: #f8fafc;
       --card-bg: #ffffff;
-      --text: #263238;
-      --danger: #d32f2f;
-      --success: #388e3c;
+      --text: #1e293b;
+      --border: #e2e8f0;
     }
-    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { background: var(--bg); color: var(--text); margin: 0; padding: 20px; direction: rtl; text-align: right; }
-    .container { max-width: 950px; margin: auto; background: var(--card-bg); padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
-    h1, h2, h3 { color: var(--primary); }
-    .btn { background: var(--primary-light); color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; display: inline-block; transition: 0.2s; }
-    .btn:hover { background: var(--primary); }
-    .btn-danger { background: var(--danger); }
-    .btn-danger:hover { background: #b71c1c; }
-    .btn-success { background: var(--success); }
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
-    .stat-card { background: #e0f2f1; padding: 15px; border-radius: 8px; text-align: center; border-right: 5px solid var(--primary-light); }
-    .stat-card h3 { margin: 0; font-size: 24px; color: var(--primary); }
-    .stat-card p { margin: 5px 0 0; color: #555; font-size: 14px; }
-    .announcement-bar { background: linear-gradient(90deg, #fff8e1, #ffecb3); color: #8f6b00; padding: 15px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #ffe082; text-align: center; }
-    .section { background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #eee; margin-top: 20px; }
-    input, textarea, select { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
-    th, td { border: 1px solid #e0e0e0; padding: 12px; text-align: center; font-size: 14px; }
-    th { background: var(--primary-light); color: white; }
-    .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; color: white; display: inline-block; font-weight: bold; }
-    .badge-a { background: #2e7d32; }
-    .badge-b { background: #0288d1; }
-    .badge-c { background: #f57c00; }
-    .badge-d { background: #c62828; }
-    .user-avatar { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary-light); }
+    * { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
+    body { background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; direction: rtl; }
+    .container { max-width: 1000px; margin: 20px auto; background: var(--card-bg); padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+    h1, h2, h3 { color: var(--primary); margin-top: 0; font-weight: 700; }
+    .btn { display: inline-block; background: var(--primary); color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s ease; text-align: center; }
+    .btn:hover { background: var(--primary-light); transform: translateY(-2px); }
+    .btn-danger { background: #e11d48; }
+    .btn-danger:hover { background: #be123c; }
+    .btn-success { background: #10b981; }
+    .btn-success:hover { background: #059669; }
+    input, select, textarea { width: 100%; padding: 12px; margin: 8px 0 16px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: #f8fafc; transition: 0.2s; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); background: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; border-radius: 8px; overflow: hidden; }
+    th { background: var(--primary); color: white; padding: 12px; font-weight: 600; text-align: right; }
+    td { padding: 12px; border-bottom: 1px solid var(--border); text-align: right; }
+    tr:hover { background-color: #f1f5f9; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+    .badge-rank { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
   </style>
 `;
 
-// الرئيسية
-app.get('/', async (req, res) => {
+// 1. الصفحة الرئيسية
+app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
-    <head><meta charset="UTF-8"><title>لجنة الانضباط الذاتية - CAD OFPPT</title>${commonCSS}</head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>لجنة الانضباط الذاتية - CAD OFPPT</title>
+        ${commonCSS}
+        <style>
+          .hero { text-align: center; padding: 40px 20px; }
+          .hero h1 { font-size: 2.2rem; margin-bottom: 10px; color: var(--primary); }
+          .hero p { color: #64748b; font-size: 1.1rem; max-width: 600px; margin: 0 auto 30px; }
+          .btn-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 40px; }
+          .rules-card { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 25px; border-radius: 12px; text-align: right; }
+          .rules-card h3 { color: #166534; display: flex; align-items: center; gap: 8px; }
+          .rules-card li { margin-bottom: 10px; color: #15803d; }
+        </style>
+    </head>
     <body>
-        <div class="container" style="text-align:center;">
-            <h1>🏛️ لجنة الانضباط الذاتية (CAD)</h1>
-            <p>مؤسسة التكوين المهني وإنعاش الشغل - منصة التواصل والالتزام والتميز</p>
+        <div class="container hero">
+            <h1>لجنة الانضباط الذاتية (CAD)</h1>
+            <p>المنصة الرسمية لتعزيز الانضباط، الالتزام، وتطوير مهارات متدربي مكتب التكوين المهني وإنعاش الشغل.</p>
             
-            <div style="margin: 30px 0; display:flex; justify-content:center; gap:15px; flex-wrap:wrap;">
-                <a href="/register" class="btn">📝 تسجيل جديد</a>
-                <a href="/login" class="btn">🔐 تسجيل الدخول</a>
-                <a href="/admin-login" class="btn btn-danger">👨‍💼 لوحة المشرفين</a>
+            <div class="btn-group">
+                <a href="/register" class="btn btn-success">تسجيل متدرب جديد</a>
+                <a href="/login" class="btn">تسجيل الدخول</a>
+                <a href="/admin-login" class="btn btn-danger">بوابة المشرفين</a>
             </div>
 
-            <div class="section" style="text-align:right;">
-                <h3>📜 القوانين والمعايير الانضباطية المطلوبة:</h3>
+            <div class="rules-card">
+                <h3>📜 القوانين والمعايير الأساسية للمؤسسة:</h3>
                 <ul>
-                    <li>الالتزام التام بالتوقيت الإداري وأحكام الميثاق الداخلي للمؤسسة.</li>
-                    <li>ارتداء الهندام اللائق واحترام كافة المتدربين والمسؤولين.</li>
-                    <li>المشاركة والمساهمة الفعالة في الأنشطة الموازية والمسابقات.</li>
+                    <li>الالتزام التام بالتوقيت الإداري والزي المدرسي المحدد.</li>
+                    <li>التحلي بالأخلاق الحسنة والتعاون الإيجابي والاحترام المتبادل.</li>
+                    <li>المشاركة الفعالة في الأنشطة الموازية والمسابقات الرسمية.</li>
                 </ul>
             </div>
         </div>
@@ -136,74 +155,87 @@ app.get('/', async (req, res) => {
   `);
 });
 
-// التسجيل
+// 2. صفحة التسجيل
 app.get('/register', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
-    <head><meta charset="UTF-8"><title>تسجيل جديد</title>${commonCSS}</head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>تسجيل متدرب جديد</title>
+        ${commonCSS}
+    </head>
     <body>
-        <div class="container" style="max-width:550px;">
-            <h2>📝 طلب تسجيل متدرب جديد</h2>
+        <div class="container" style="max-width: 500px;">
+            <h2>إنشاء حساب متدرب جديد</h2>
             <form action="/register" method="POST" enctype="multipart/form-data">
-                <label>الإسم والنسب الكامل:</label>
-                <input type="text" name="fullname" required placeholder="مثال: ياسين الغزلافي">
+                <label>الاسم الكامل:</label>
+                <input type="text" name="fullname" placeholder="مثال: محمد العلوي" required>
+                
                 <label>رقم بطاقة التعريف الوطنية (CIN):</label>
-                <input type="text" name="cin" required placeholder="مثال: HH123456">
-                <label>القسم / الشعبة:</label>
-                <input type="text" name="group" required placeholder="مثال: TSGO-101">
-                <label>صورة شخصية (اختياري):</label>
-                <input type="file" name="avatar" accept="image/*">
-                <label>صورة بطاقة مسار / التعريف (PNJ):</label>
+                <input type="text" name="cin" placeholder="مثال: AB123456" required>
+                
+                <label>صورة بطاقة المتدرب أو الـ PNJ:</label>
                 <input type="file" name="pnj" accept="image/*" required>
+                
+                <label>القسم / الشعبة:</label>
+                <input type="text" name="group" placeholder="مثال: DEVOWFS201" required>
+                
                 <label>كلمة المرور:</label>
                 <input type="password" name="password" required>
-                <button type="submit" class="btn" style="width:100%; margin-top:10px;">إرسال طلب التسجيل</button>
-                <p style="text-align:center;"><a href="/">العودة للرئيسية</a></p>
+                
+                <button type="submit" class="btn btn-success" style="width:100%;">إرسال طلب التسجيل</button>
             </form>
+            <p style="text-align:center; margin-top:20px;"><a href="/" style="color:var(--primary); text-decoration:none;">العودة للرئيسية</a></p>
         </div>
     </body>
     </html>
   `);
 });
 
-app.post('/register', upload.fields([{ name: 'pnj' }, { name: 'avatar' }]), async (req, res) => {
+app.post('/register', upload.single('pnj'), async (req, res) => {
   try {
     const { fullname, cin, group, password } = req.body;
-    let pnjBase64 = '', avatarBase64 = '';
+    // req.file.path يحتوي مباشرة على رابط الصورة الآمن في Cloudinary
+    const fileUrl = req.file ? req.file.path : '';
     
-    if (req.files && req.files['pnj']) {
-      pnjBase64 = `data:${req.files['pnj'][0].mimetype};base64,${req.files['pnj'][0].buffer.toString('base64')}`;
-    }
-    if (req.files && req.files['avatar']) {
-      avatarBase64 = `data:${req.files['avatar'][0].mimetype};base64,${req.files['avatar'][0].buffer.toString('base64')}`;
-    }
-
-    const newUser = new User({ fullname, cin, pnj: pnjBase64, avatar: avatarBase64, group, password });
-    await newUser.save();
-    res.send(`<script>alert('تم إرسال طلبك بنجاح، وهو قيد المراجعة من طرف أعضاء اللجنة.'); window.location.href='/';</script>`);
+    await User.create({
+      fullname,
+      cin: cin.trim().toUpperCase(),
+      pnj: fileUrl,
+      group,
+      password
+    });
+    
+    res.send(`<script>alert('تم إرسال طلبك بنجاح! سيتم مراجعته من طرف المشرفين.'); window.location.href='/';</script>`);
   } catch (err) {
-    res.send(`<script>alert('خطأ: رقم بطاقة التعريف مستخدم مسبقاً.'); window.location.href='/register';</script>`);
+    res.send(`<script>alert('رقم بطاقة التعريف الوطنية (CIN) مسجل مسبقاً أو حدث خطأ ما.'); window.location.href='/register';</script>`);
   }
 });
 
-// تسجيل الدخول
+// 3. صفحة تسجيل الدخول
 app.get('/login', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
-    <head><meta charset="UTF-8"><title>تسجيل الدخول</title>${commonCSS}</head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>تسجيل الدخول للمتدربين</title>
+        ${commonCSS}
+    </head>
     <body>
-        <div class="container" style="max-width:450px;">
-            <h2>🔐 تسجيل دخول المتدرب</h2>
+        <div class="container" style="max-width: 420px;">
+            <h2>تسجيل دخول المتدرب</h2>
             <form action="/login" method="POST">
-                <label>رقم بطاقة التعريف الوطنية (CIN):</label>
+                <label>رقم CIN:</label>
                 <input type="text" name="cin" required>
                 <label>كلمة المرور:</label>
                 <input type="password" name="password" required>
-                <button type="submit" class="btn" style="width:100%; margin-top:10px;">دخول</button>
-                <p style="text-align:center;"><a href="/">العودة للرئيسية</a></p>
+                <button type="submit" class="btn" style="width:100%;">دخول</button>
             </form>
+            <p style="text-align:center; margin-top:20px;"><a href="/" style="color:var(--primary); text-decoration:none;">العودة للرئيسية</a></p>
         </div>
     </body>
     </html>
@@ -211,95 +243,92 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-  const { cin, password } = req.body;
+  const cin = req.body.cin ? req.body.cin.trim().toUpperCase() : '';
+  const { password } = req.body;
+  
   const user = await User.findOne({ cin, password });
-  if (!user) return res.send(`<script>alert('بيانات الدخول غير صحيحة!'); window.location.href='/login';</script>`);
-  if (user.status !== 'accepted') return res.send(`<script>alert('حسابك قيد المراجعة والقبول من طرف المشرفين.'); window.location.href='/';</script>`);
+  
+  if (!user) {
+    return res.send(`<script>alert('بيانات الدخول غير صحيحة!'); window.location.href='/login';</script>`);
+  }
+  if (user.status !== 'accepted') {
+    return res.send(`<script>alert('حسابك قيد المراجعة ولم يتم قبوله بعد.'); window.location.href='/';</script>`);
+  }
+
   res.redirect(`/profile?cin=${cin}`);
 });
 
-// الملف الشخصي للمتدرب
+// 4. ملف المتدرب الشخصي
 app.get('/profile', async (req, res) => {
   const { cin } = req.query;
   const user = await User.findOne({ cin });
   if (!user) return res.redirect('/login');
 
-  const latestAnnouncement = await Announcement.findOne().sort({ date: -1 }) || { text: "لا توجد إعلانات جديدة حالياً." };
-  const starSetting = await Settings.findOne({ key: 'starOfTheMonth' });
-  const isStar = starSetting && starSetting.value === user.cin;
-  const userComplaints = await Complaint.find({ senderCin: user.cin }).sort({ date: -1 });
+  const latestAnnouncement = await Announcement.findOne().sort({ _id: -1 }) || { text: "لا توجد إعلانات جديدة حالياً.", image: "" };
+  const settings = await Settings.findOne({ key: 'star' });
+  const isStar = settings && settings.starCin === user.cin;
   const competitions = await Competition.find();
 
   res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
-    <head><meta charset="UTF-8"><title>الملف الشخصي - ${user.fullname}</title>${commonCSS}</head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>الملف الشخصي - ${user.fullname}</title>
+        ${commonCSS}
+        <style>
+          .announcement-box { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
+          .star-badge { background: #fef08a; color: #854d0e; padding: 10px 15px; border-radius: 8px; border: 1px solid #facc15; font-weight: bold; margin-bottom: 20px; display: inline-block; }
+          .card-section { background: #f8fafc; border: 1px solid var(--border); padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        </style>
+    </head>
     <body>
-        <div class="announcement-bar">
-            📢 <b>إعلان لجنة الانضباط:</b> ${latestAnnouncement.text}
-            ${latestAnnouncement.image ? `<br><img src="${latestAnnouncement.image}" width="220" style="margin-top:10px; border-radius:6px;">` : ''}
-        </div>
-
         <div class="container">
-            <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap; border-bottom:2px solid #eee; padding-bottom:15px;">
-                <img src="${user.avatar || 'https://via.placeholder.com/90'}" class="user-avatar" alt="Profile">
-                <div>
-                    <h2 style="margin:0;">${user.fullname}</h2>
-                    <p style="margin:5px 0; color:#666;">القسم: <b>${user.group}</b> | CIN: <b>${user.cin}</b></p>
-                    <p style="margin:0;">الرتبة الانضباطية: <span class="badge badge-${user.rank.toLowerCase()}">الرتبة ${user.rank}</span></p>
-                </div>
+            <div class="announcement-box">
+                🔔 <strong>إعلان هام من اللجنة:</strong> ${latestAnnouncement.text}
+                ${latestAnnouncement.image ? `<br><img src="${latestAnnouncement.image}" style="max-width:200px; margin-top:10px; border-radius:8px;">` : ''}
             </div>
 
-            ${isStar ? '<div class="section" style="background:#fff9c4; border-color:#fbc02d; text-align:center;">🌟 <b>مبروك! لقد تم اختيارك "نجم الشهر" كأكثر المتدربين التزاماً وإبداعاً.</b></div>' : ''}
+            <h2>مرحباً بك، ${user.fullname} 👋</h2>
+            <p><strong>الشعبة:</strong> ${user.group} | <strong>الرتبة الانضباطية:</strong> <span class="badge badge-rank">الرتبة ${user.rank}</span></p>
 
-            <!-- إضافة المهارات واللغات -->
-            <div class="section">
-                <h3>💡 مهاراتي واللغات المتقنة</h3>
+            ${isStar ? '<div class="star-badge">🌟 تهانينا! تم اختيارك كنجم الشهر نظيراً لانضباطك وتميزك!</div>' : ''}
+
+            <div class="card-section">
+                <h3>تحديث المهارات واللغات</h3>
                 <form action="/update-profile" method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="cin" value="${user.cin}">
                     <label>المهارات (افصل بينها بفواصل):</label>
-                    <input type="text" name="skills" value="${user.skills.join(', ')}" placeholder="AutoCAD, MS Project, رسم تقني...">
+                    <input type="text" name="skills" value="${user.skills.join(', ')}">
+                    
                     <label>اللغات المتقنة:</label>
-                    <input type="text" name="languages" value="${user.languages.join(', ')}" placeholder="العربية, الفرنسية, الإنجليزية...">
-                    <label>صورة إثبات المهارة / عمل شخصي:</label>
+                    <input type="text" name="languages" value="${user.languages.join(', ')}">
+                    
+                    <label>صورة لإنجاز أو مهارة:</label>
                     <input type="file" name="skillImage" accept="image/*">
-                    <button type="submit" class="btn">حفظ التحديثات</button>
+                    <button type="submit" class="btn">تحديث البيانات</button>
                 </form>
+                ${user.skillImage ? `<br><img src="${user.skillImage}" style="max-width:150px; border-radius:8px; margin-top:10px;">` : ''}
             </div>
 
-            <!-- تقديم ومتابعة الشكايات -->
-            <div class="section">
-                <h3>📩 تقديم شكاية / ملاحظة للجنة</h3>
+            <div class="card-section">
+                <h3>تقديم شكاية أو اقتراح</h3>
                 <form action="/add-complaint" method="POST">
                     <input type="hidden" name="cin" value="${user.cin}">
-                    <textarea name="complaintText" placeholder="اكتب موضوع الشكاية هنا بوضوح..." required></textarea>
-                    <button type="submit" class="btn">إرسال الشكاية</button>
+                    <textarea name="complaintText" rows="3" placeholder="اكتب شكايتك أو ملاحظتك هنا بوضوح..." required></textarea>
+                    <button type="submit" class="btn btn-danger">إرسال للجنة</button>
                 </form>
-
-                <h4 style="margin-top:20px;">حالة شكاياتي السابقة:</h4>
-                ${userComplaints.length === 0 ? '<p style="color:#777;">لم تقدم أي شكاية بعد.</p>' : `
-                  <table>
-                    <tr><th>نص الشكاية</th><th>الحالة</th><th>رد اللجنة</th></tr>
-                    ${userComplaints.map(c => `
-                        <tr>
-                            <td>${c.text}</td>
-                            <td><span style="color:${c.status === 'تمت المعالجة' ? 'green' : 'orange'}; font-weight:bold;">${c.status}</span></td>
-                            <td>${c.response || 'في انتظار الرد...'}</td>
-                        </tr>
-                    `).join('')}
-                  </table>
-                `}
             </div>
 
-            <!-- المسابقات -->
-            <div class="section">
-                <h3>🏆 ركن المسابقات والنتائج</h3>
+            <div class="card-section">
+                <h3>جدول المسابقات والنتائج</h3>
                 <ul>
-                    ${competitions.map(c => `<li><b>${c.title}</b> - النتيجة: <span style="color:green; font-weight:bold;">${c.result}</span></li>`).join('')}
+                    ${competitions.length > 0 ? competitions.map(c => `<li><b>${c.title}:</b>${c.result}</li>`).join('') : '<li>لا توجد مسابقات حالياً.</li>'}
                 </ul>
             </div>
 
-            <p style="text-align:center; margin-top:20px;"><a href="/" class="btn btn-danger">تسجيل الخروج</a></p>
+            <p style="text-align:center;"><a href="/" class="btn btn-danger" style="text-decoration:none;">تسجيل الخروج</a></p>
         </div>
     </body>
     </html>
@@ -312,7 +341,10 @@ app.post('/update-profile', upload.single('skillImage'), async (req, res) => {
     skills: skills ? skills.split(',').map(s => s.trim()) : [],
     languages: languages ? languages.split(',').map(l => l.trim()) : []
   };
-  if (req.file) updateData.skillImage = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+  if (req.file) {
+    updateData.skillImage = req.file.path; // رابط الصورة من Cloudinary
+  }
+  
   await User.findOneAndUpdate({ cin }, updateData);
   res.redirect(`/profile?cin=${cin}`);
 });
@@ -321,188 +353,260 @@ app.post('/add-complaint', async (req, res) => {
   const { cin, complaintText } = req.body;
   const user = await User.findOne({ cin });
   if (user) {
-    await Complaint.create({ senderName: user.fullname, senderCin: user.cin, group: user.group, text: complaintText });
+    await Complaint.create({
+      senderName: user.fullname,
+      senderCin: user.cin,
+      group: user.group,
+      text: complaintText
+    });
   }
-  res.send(`<script>alert('تم إرسال الشكاية للجنة الانضباط بنجاح.'); window.location.href='/profile?cin=${cin}';</script>`);
+  res.send(`<script>alert('تم تقديم الشكاية بنجاح.'); window.location.href='/profile?cin=${cin}';</script>`);
 });
 
-// لوحة تحكم المشرفين
+// 5. تسجيل دخول المشرفين
 app.get('/admin-login', (req, res) => {
   res.send(`
-    <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>دخول المشرفين</title>${commonCSS}</head>
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>دخول المشرفين</title>
+        ${commonCSS}
+    </head>
     <body>
-        <div class="container" style="max-width:450px;">
-            <h2>👨‍💼 دخول المشرفين (لجنة CAD)</h2>
+        <div class="container" style="max-width: 400px;">
+            <h2>لوحة المشرفين (CAD)</h2>
             <form action="/admin-dashboard" method="POST">
-                <label>كلمة مرور المشرفين:</label>
+                <label>كلمة المرور الخاصة بالمشرفين:</label>
                 <input type="password" name="adminPass" required>
-                <button type="submit" class="btn btn-danger" style="width:100%; margin-top:10px;">دخول لوحة التحكم</button>
-                <p style="text-align:center;"><a href="/">العودة للرئيسية</a></p>
+                <button type="submit" class="btn btn-danger" style="width:100%;">دخول اللوحة</button>
             </form>
+            <p style="text-align:center; margin-top:20px;"><a href="/" style="color:var(--primary); text-decoration:none;">العودة للرئيسية</a></p>
         </div>
     </body>
     </html>
   `);
 });
 
+// 6. لوحة تحكم المشرفين مع ميزة البحث المباشر
 app.post('/admin-dashboard', async (req, res) => {
   const { adminPass } = req.body;
-  if (adminPass !== 'cad2026') return res.send(`<script>alert('كلمة المرور غير صحيحة!'); window.location.href='/admin-login';</script>`);
+  if (adminPass !== 'cad2026') {
+    return res.send(`<script>alert('كلمة المرور غير صحيحة!'); window.location.href='/admin-login';</script>`);
+  }
 
   const users = await User.find();
-  const complaints = await Complaint.find().sort({ date: -1 });
+  const complaints = await Complaint.find();
   const competitions = await Competition.find();
-
-  const totalUsers = users.filter(u => u.status === 'accepted').length;
-  const pendingUsers = users.filter(u => u.status === 'pending').length;
-  const pendingComplaints = complaints.filter(c => c.status === 'قيد الدراسة').length;
 
   res.send(`
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
-    <head><meta charset="UTF-8"><title>لوحة التحكم - المشرفين</title>${commonCSS}</head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>لوحة إدارة لجنة الانضباط - CAD</title>
+        ${commonCSS}
+        <style>
+          .admin-section { background: #f8fafc; border: 1px solid var(--border); padding: 20px; border-radius: 12px; margin-bottom: 25px; }
+          .search-box { position: relative; margin-bottom: 20px; }
+          .search-box input { padding-right: 40px; font-size: 16px; border: 2px solid var(--primary-light); }
+        </style>
+    </head>
     <body>
-        <div class="container" style="max-width:1100px;">
-            <h2>📊 لوحة تحكم أعضاء لجنة الانضباط الذاتية</h2>
+        <div class="container">
+            <h2>🛡️ لوحة التحكم الخاصة بلجنة CAD</h2>
             
-            <!-- لوحة إحصائيات سريعة -->
-            <div class="stats-grid">
-                <div class="stat-card"><h3>${totalUsers}</h3><p>المتدربين المقبولين</p></div>
-                <div class="stat-card" style="border-color:orange;"><h3>${pendingUsers}</h3><p>طلبات تسجيل معلقة</p></div>
-                <div class="stat-card" style="border-color:red;"><h3>${pendingComplaints}</h3><p>شكايات قيد المعالجة</p></div>
-                <div class="stat-card" style="border-color:green;"><h3>${competitions.length}</h3><p>المسابقات النشطة</p></div>
+            <!-- ميزة البحث المباشر عن المتدربين -->
+            <div class="admin-section">
+                <h3>🔍 البحث السريع عن المتدربين</h3>
+                <div class="search-box">
+                    <input type="text" id="searchInput" onkeyup="filterUsers()" placeholder="ابحث باسم المتدرب، رقم CIN، أو الشعبة...">
+                </div>
+
+                <h3>قائمة المتدربين والطلبات</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الاسم الكامل</th>
+                            <th>CIN</th>
+                            <th>الشعبة</th>
+                            <th>البطاقة PNJ</th>
+                            <th>الحالة</th>
+                            <th>الرتبة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTable">
+                        ${users.map(u => `
+                            <tr class="user-row">
+                                <td class="user-name">${u.fullname}</td>
+                                <td class="user-cin">${u.cin}</td>
+                                <td class="user-group">${u.group}</td>
+                                <td>${u.pnj ? `<a href="${u.pnj}" target="_blank" style="color:var(--accent);">عرض الملف</a>` : 'لا يوجد'}</td>
+                                <td>${u.status === 'pending' ? '<span style="color:#d97706; font-weight:bold;">قيد الانتظار</span>' : '<span style="color:#059669; font-weight:bold;">مقبول</span>'}</td>
+                                <td>
+                                    <form action="/admin/update-rank" method="POST" style="margin:0;">
+                                        <input type="hidden" name="adminPass" value="cad2026">
+                                        <input type="hidden" name="cin" value="${u.cin}">
+                                        <select name="rank" onchange="this.form.submit()" style="margin:0; padding:4px;">
+                                            <option value="A" ${u.rank==='A'?'selected':''}>A</option>
+                                            <option value="B" ${u.rank==='B'?'selected':''}>B</option>
+                                            <option value="C" ${u.rank==='C'?'selected':''}>C</option>
+                                            <option value="D" ${u.rank==='D'?'selected':''}>D</option>
+                                        </select>
+                                    </form>
+                                </td>
+                                <td>
+                                    ${u.status === 'pending' ? `
+                                        <form action="/admin/accept" method="POST" style="display:inline;">
+                                            <input type="hidden" name="adminPass" value="cad2026">
+                                            <input type="hidden" name="cin" value="${u.cin}">
+                                            <button type="submit" class="btn btn-success" style="padding:4px 8px; font-size:12px;">قبول</button>
+                                        </form>
+                                    ` : ''}
+                                    <form action="/admin/delete" method="POST" style="display:inline;">
+                                        <input type="hidden" name="adminPass" value="cad2026">
+                                        <input type="hidden" name="cin" value="${u.cin}">
+                                        <button type="submit" class="btn btn-danger" style="padding:4px 8px; font-size:12px;">حذف</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
             </div>
 
-            <!-- نشر إعلان -->
-            <div class="section">
-                <h3>📢 نشر إعلان جديد في الشريط العلوي</h3>
+            <!-- إعلانات ورسائل اللجنة -->
+            <div class="admin-section">
+                <h3>📢 نشر إعلان جديد</h3>
                 <form action="/admin/add-announcement" method="POST" enctype="multipart/form-data">
-                    <textarea name="text" placeholder="نص الإعلان الموجه لجميع المتدربين..." required></textarea>
+                    <input type="hidden" name="adminPass" value="cad2026">
+                    <textarea name="text" placeholder="اكتب نص الإعلان هنا..." required></textarea>
                     <label>صورة مرفقة بالإعلان (اختياري):</label>
                     <input type="file" name="annImage" accept="image/*">
                     <button type="submit" class="btn">نشر الإعلان</button>
                 </form>
             </div>
 
-            <!-- نجم الشهر -->
-            <div class="section">
-                <h3>🌟 منح بادج "نجم الشهر" للمتدرب الأكثر التزاماً</h3>
+            <!-- اختيار نجم الشهر -->
+            <div class="admin-section">
+                <h3>⭐ اختيار نجم الشهر</h3>
                 <form action="/admin/set-star" method="POST">
+                    <input type="hidden" name="adminPass" value="cad2026">
                     <select name="cin">
-                        ${users.filter(u => u.status === 'accepted').map(u => `<option value="${u.cin}">${u.fullname} - (القسم: ${u.group})</option>`).join('')}
+                        ${users.filter(u => u.status === 'accepted').map(u => `<option value="${u.cin}">${u.fullname} - (${u.group})</option>`).join('')}
                     </select>
-                    <button type="submit" class="btn btn-success">تحديد كـ نجم الشهر</button>
+                    <button type="submit" class="btn btn-success">تعيين المتدرب كنجم الشهر</button>
                 </form>
             </div>
 
-            <!-- إشراف وإدارة المتدربين -->
-            <div class="section">
-                <h3>👥 قائمة المتدربين والتصنيف (A, B, C, D)</h3>
+            <!-- إدارة المسابقات -->
+            <div class="admin-section">
+                <h3>🏆 إدارة المسابقات</h3>
+                <form action="/admin/add-competition" method="POST">
+                    <input type="hidden" name="adminPass" value="cad2026">
+                    <input type="text" name="title" placeholder="اسم المسابقة..." required>
+                    <input type="text" name="result" placeholder="النتيجة أو الفائز..." required>
+                    <button type="submit" class="btn">إضافة / تحديث المسابقة</button>
+                </form>
+            </div>
+
+            <!-- الشكايات -->
+            <div class="admin-section">
+                <h3>📩 الشكايات والملاحظات الواردة</h3>
                 <table>
-                    <tr>
-                        <th>الصورة</th>
-                        <th>الإسم والنسب / CIN</th>
-                        <th>الشعبة</th>
-                        <th>المهارات واللغات</th>
-                        <th>الحالة</th>
-                        <th>الرتبة</th>
-                        <th>الإجراءات</th>
-                    </tr>
-                    ${users.map(u => `
+                    <thead>
                         <tr>
-                            <td><img src="${u.avatar || 'https://via.placeholder.com/50'}" style="width:45px; height:45px; border-radius:50%; object-fit:cover;"></td>
-                            <td><b>${u.fullname}</b><br><small>${u.cin}</small></td>
-                            <td>${u.group}</td>
-                            <td>
-                                <b>المهارات:</b> ${u.skills.join(', ') || 'لا توجد'}<br>
-                                <b>اللغات:</b> ${u.languages.join(', ') || 'لا توجد'}
-                            </td>
-                            <td>${u.status === 'pending' ? '<span style="color:orange;">معلق</span>' : '<span style="color:green;">مقبول</span>'}</td>
-                            <td>
-                                <form action="/admin/update-rank" method="POST">
-                                    <input type="hidden" name="cin" value="${u.cin}">
-                                    <select name="rank" onchange="this.form.submit()">
-                                        <option value="A" ${u.rank==='A'?'selected':''}>A</option>
-                                        <option value="B" ${u.rank==='B'?'selected':''}>B</option>
-                                        <option value="C" ${u.rank==='C'?'selected':''}>C</option>
-                                        <option value="D" ${u.rank==='D'?'selected':''}>D</option>
-                                    </select>
-                                </form>
-                            </td>
-                            <td>
-                                ${u.status === 'pending' ? `<a href="/admin/accept?cin=${u.cin}"><button class="btn btn-success" style="padding:4px 8px; font-size:12px;">قبول</button></a>` : ''}
-                                <a href="/admin/delete?cin=${u.cin}"><button class="btn btn-danger" style="padding:4px 8px; font-size:12px;">حذف</button></a>
-                            </td>
+                            <th>المتدرب</th>
+                            <th>القسم</th>
+                            <th>الشكاية</th>
                         </tr>
-                    `).join('')}
+                    </thead>
+                    <tbody>
+                        ${complaints.map(c => `
+                            <tr>
+                                <td>${c.senderName} (${c.senderCin})</td>
+                                <td>${c.group}</td>
+                                <td>${c.text}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
                 </table>
             </div>
 
-            <!-- معالجة الشكايات -->
-            <div class="section">
-                <h3>📬 الشكايات الواردة والرد عليها</h3>
-                <table>
-                    <tr><th>المشتكي</th><th>الشكاية</th><th>الحالة والرد</th></tr>
-                    ${complaints.map(c => `
-                        <tr>
-                            <td><b>${c.senderName}</b> (${c.group})<br><small>${c.senderCin}</small></td>
-                            <td>${c.text}</td>
-                            <td>
-                                <form action="/admin/respond-complaint" method="POST">
-                                    <input type="hidden" name="id" value="${c._id}">
-                                    <input type="text" name="response" value="${c.response}" placeholder="اكتب رد اللجنة...">
-                                    <select name="status">
-                                        <option value="قيد الدراسة" ${c.status==='قيد الدراسة'?'selected':''}>قيد الدراسة</option>
-                                        <option value="تمت المعالجة" ${c.status==='تمت المعالجة'?'selected':''}>تمت المعالجة</option>
-                                    </select>
-                                    <button type="submit" class="btn" style="padding:4px 8px; margin-top:4px;">حفظ الرد</button>
-                                </form>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </table>
-            </div>
-
-            <p style="text-align:center; margin-top:20px;"><a href="/" class="btn btn-danger">تسجيل الخروج</a></p>
+            <p style="text-align:center;"><a href="/" class="btn btn-danger">تسجيل الخروج</a></p>
         </div>
+
+        <script>
+            function filterUsers() {
+                const input = document.getElementById('searchInput').value.toLowerCase();
+                const rows = document.querySelectorAll('.user-row');
+
+                rows.forEach(row => {
+                    const name = row.querySelector('.user-name').textContent.toLowerCase();
+                    const cin = row.querySelector('.user-cin').textContent.toLowerCase();
+                    const group = row.querySelector('.user-group').textContent.toLowerCase();
+
+                    if (name.includes(input) || cin.includes(input) || group.includes(input)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            }
+        </script>
     </body>
     </html>
   `);
 });
 
-// المسارات الخاصة بقرارات المشرفين
+// المسارات الخاصة بالإجراءات الإدارية
 app.post('/admin/add-announcement', upload.single('annImage'), async (req, res) => {
-  let imgBase64 = '';
-  if (req.file) imgBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-  await Announcement.create({ text: req.body.text, image: imgBase64 });
-  res.redirect('/admin-login');
+  const { text, adminPass } = req.body;
+  await Announcement.create({
+    text,
+    image: req.file ? req.file.path : ''
+  });
+  res.redirect(307, '/admin-dashboard');
 });
 
 app.post('/admin/set-star', async (req, res) => {
-  await Settings.findOneAndUpdate({ key: 'starOfTheMonth' }, { value: req.body.cin }, { upsert: true });
-  res.redirect('/admin-login');
+  const { cin, adminPass } = req.body;
+  await Settings.findOneAndUpdate(
+    { key: 'star' },
+    { starCin: cin },
+    { upsert: true }
+  );
+  res.redirect(307, '/admin-dashboard');
+});
+
+app.post('/admin/add-competition', async (req, res) => {
+  const { title, result, adminPass } = req.body;
+  await Competition.create({ title, result });
+  res.redirect(307, '/admin-dashboard');
 });
 
 app.post('/admin/update-rank', async (req, res) => {
-  await User.findOneAndUpdate({ cin: req.body.cin }, { rank: req.body.rank });
-  res.redirect('/admin-login');
+  const { cin, rank, adminPass } = req.body;
+  await User.findOneAndUpdate({ cin }, { rank });
+  res.redirect(307, '/admin-dashboard');
 });
 
-app.post('/admin/respond-complaint', async (req, res) => {
-  const { id, response, status } = req.body;
-  await Complaint.findByIdAndUpdate(id, { response, status });
-  res.redirect('/admin-login');
+app.post('/admin/accept', async (req, res) => {
+  const { cin, adminPass } = req.body;
+  await User.findOneAndUpdate({ cin }, { status: 'accepted' });
+  res.redirect(307, '/admin-dashboard');
 });
 
-app.get('/admin/accept', async (req, res) => {
-  await User.findOneAndUpdate({ cin: req.query.cin }, { status: 'accepted' });
-  res.redirect('/admin-login');
-});
-
-app.get('/admin/delete', async (req, res) => {
-  await User.findOneAndDelete({ cin: req.query.cin });
-  res.redirect('/admin-login');
+app.post('/admin/delete', async (req, res) => {
+  const { cin, adminPass } = req.body;
+  await User.findOneAndDelete({ cin });
+  res.redirect(307, '/admin-dashboard');
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
