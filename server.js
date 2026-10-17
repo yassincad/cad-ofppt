@@ -15,18 +15,17 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ تم الاتصال بقاعدة بيانات MongoDB بنجاح'))
   .catch(err => console.error('❌ خطأ في الاتصال بـ MongoDB:', err));
 
-// 2. إعدادات Cloudinary (يمكنك استبدالها بمعلومات حسابك من لوحة تحكم Cloudinary)
+// 2. إعدادات Cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'scgacjvy', // اسم الحساب الظاهر في الصورة لديك
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'scgacjvy',
   api_key: process.env.CLOUDINARY_API_KEY || 'YOUR_API_KEY',
   api_secret: process.env.CLOUDINARY_API_SECRET || 'YOUR_API_SECRET'
 });
 
-// إعداد التخزين السحابي لـ Multer عبر Cloudinary
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'cad_ofppt_uploads', // اسم المجلد داخل حسابك في Cloudinary
+    folder: 'cad_ofppt_uploads',
     allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
   },
 });
@@ -36,7 +35,7 @@ const upload = multer({ storage: storage });
 const userSchema = new mongoose.Schema({
   fullname: { type: String, required: true },
   cin: { type: String, required: true, unique: true, uppercase: true },
-  pnj: { type: String, required: true }, // رابط الصورة المباشر من Cloudinary
+  pnj: { type: String, required: true },
   group: { type: String, required: true },
   password: { type: String, required: true },
   status: { type: String, default: 'pending' },
@@ -51,6 +50,7 @@ const complaintSchema = new mongoose.Schema({
   senderCin: String,
   group: String,
   text: String,
+  status: { type: String, default: 'قيد المراجعة' },
   date: { type: Date, default: Date.now }
 });
 
@@ -93,7 +93,7 @@ const commonCSS = `
     body { background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; direction: rtl; }
     .container { max-width: 1000px; margin: 20px auto; background: var(--card-bg); padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
     h1, h2, h3 { color: var(--primary); margin-top: 0; font-weight: 700; }
-    .btn { display: inline-block; background: var(--primary); color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s ease; text-align: center; }
+    .btn { display: inline-block; background: var(--primary); color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s ease; text-align: center; }
     .btn:hover { background: var(--primary-light); transform: translateY(-2px); }
     .btn-danger { background: #e11d48; }
     .btn-danger:hover { background: #be123c; }
@@ -107,10 +107,11 @@ const commonCSS = `
     tr:hover { background-color: #f1f5f9; }
     .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
     .badge-rank { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .site-logo { width: 140px; height: auto; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
   </style>
 `;
 
-// 1. الصفحة الرئيسية
+// 1. الصفحة الرئيسية مع الشعار الجديد
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -121,7 +122,7 @@ app.get('/', (req, res) => {
         <title>لجنة الانضباط الذاتية - CAD OFPPT</title>
         ${commonCSS}
         <style>
-          .hero { text-align: center; padding: 40px 20px; }
+          .hero { text-align: center; padding: 20px 20px 40px; }
           .hero h1 { font-size: 2.2rem; margin-bottom: 10px; color: var(--primary); }
           .hero p { color: #64748b; font-size: 1.1rem; max-width: 600px; margin: 0 auto 30px; }
           .btn-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 40px; }
@@ -132,6 +133,9 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container hero">
+            <!-- إضافة الشعار هنا -->
+            <img src="https://res.cloudinary.com/scgacjvy/image/upload/v1/cad_ofppt_uploads/logo_cad" alt="شعار لجنة الانضباط الذاتية CAD" class="site-logo" onerror="this.onerror=null; this.src='https://i.imgur.com/7kX1g6u.png';">
+            
             <h1>لجنة الانضباط الذاتية (CAD)</h1>
             <p>المنصة الرسمية لتعزيز الانضباط، الالتزام، وتطوير مهارات متدربي مكتب التكوين المهني وإنعاش الشغل.</p>
             
@@ -155,7 +159,7 @@ app.get('/', (req, res) => {
   `);
 });
 
-// 2. صفحة التسجيل
+// 2. صفحة التسجيل (تغيير النص إلى صورة المتدرب)
 app.get('/register', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -176,7 +180,7 @@ app.get('/register', (req, res) => {
                 <label>رقم بطاقة التعريف الوطنية (CIN):</label>
                 <input type="text" name="cin" placeholder="مثال: AB123456" required>
                 
-                <label>صورة المتدرب  :</label>
+                <label>صورة المتدرب:</label>
                 <input type="file" name="pnj" accept="image/*" required>
                 
                 <label>القسم / الشعبة:</label>
@@ -197,7 +201,6 @@ app.get('/register', (req, res) => {
 app.post('/register', upload.single('pnj'), async (req, res) => {
   try {
     const { fullname, cin, group, password } = req.body;
-    // req.file.path يحتوي مباشرة على رابط الصورة الآمن في Cloudinary
     const fileUrl = req.file ? req.file.path : '';
     
     await User.create({
@@ -258,7 +261,7 @@ app.post('/login', async (req, res) => {
   res.redirect(`/profile?cin=${cin}`);
 });
 
-// 4. ملف المتدرب الشخصي
+// 4. ملف المتدرب الشخصي (مع عرض حالة الشكاية المحدثة)
 app.get('/profile', async (req, res) => {
   const { cin } = req.query;
   const user = await User.findOne({ cin });
@@ -268,6 +271,7 @@ app.get('/profile', async (req, res) => {
   const settings = await Settings.findOne({ key: 'star' });
   const isStar = settings && settings.starCin === user.cin;
   const competitions = await Competition.find();
+  const userComplaints = await Complaint.find({ senderCin: user.cin });
 
   res.send(`
     <!DOCTYPE html>
@@ -319,6 +323,18 @@ app.get('/profile', async (req, res) => {
                     <textarea name="complaintText" rows="3" placeholder="اكتب شكايتك أو ملاحظتك هنا بوضوح..." required></textarea>
                     <button type="submit" class="btn btn-danger">إرسال للجنة</button>
                 </form>
+
+                <h4 style="margin-top:20px;">متابعة شكاياتك:</h4>
+                <ul>
+                    ${userComplaints.length > 0 ? userComplaints.map(c => `
+                        <li>
+                            <b>${c.text}</b> - 
+                            <span style="color:${c.status === 'قيد المراجعة' ? '#d97706' : '#059669'}; font-weight:bold;">
+                                ${c.status === 'قيد المراجعة' ? 'قيد المراجعة' : 'تمت معالجة شكايتك من طرف اللجنة'}
+                            </span>
+                        </li>
+                    `).join('') : '<li>لا توجد شكايات مرسلة حالياً.</li>'}
+                </ul>
             </div>
 
             <div class="card-section">
@@ -342,7 +358,7 @@ app.post('/update-profile', upload.single('skillImage'), async (req, res) => {
     languages: languages ? languages.split(',').map(l => l.trim()) : []
   };
   if (req.file) {
-    updateData.skillImage = req.file.path; // رابط الصورة من Cloudinary
+    updateData.skillImage = req.file.path;
   }
   
   await User.findOneAndUpdate({ cin }, updateData);
@@ -357,7 +373,8 @@ app.post('/add-complaint', async (req, res) => {
       senderName: user.fullname,
       senderCin: user.cin,
       group: user.group,
-      text: complaintText
+      text: complaintText,
+      status: 'قيد المراجعة'
     });
   }
   res.send(`<script>alert('تم تقديم الشكاية بنجاح.'); window.location.href='/profile?cin=${cin}';</script>`);
@@ -389,7 +406,7 @@ app.get('/admin-login', (req, res) => {
   `);
 });
 
-// 6. لوحة تحكم المشرفين مع ميزة البحث المباشر
+// 6. لوحة تحكم المشرفين مع إدارة الشكايات (قبول وحذف)
 app.post('/admin-dashboard', async (req, res) => {
   const { adminPass } = req.body;
   if (adminPass !== 'caddac@2004') {
@@ -418,7 +435,6 @@ app.post('/admin-dashboard', async (req, res) => {
         <div class="container">
             <h2>🛡️ لوحة التحكم الخاصة بلجنة CAD</h2>
             
-            <!-- ميزة البحث المباشر عن المتدربين -->
             <div class="admin-section">
                 <h3>🔍 البحث السريع عن المتدربين</h3>
                 <div class="search-box">
@@ -432,7 +448,7 @@ app.post('/admin-dashboard', async (req, res) => {
                             <th>الاسم الكامل</th>
                             <th>CIN</th>
                             <th>الشعبة</th>
-                            <th>البطاقة PNJ</th>
+                            <th>صورة المتدرب</th>
                             <th>الحالة</th>
                             <th>الرتبة</th>
                             <th>الإجراءات</th>
@@ -478,7 +494,6 @@ app.post('/admin-dashboard', async (req, res) => {
                 </table>
             </div>
 
-            <!-- إعلانات ورسائل اللجنة -->
             <div class="admin-section">
                 <h3>📢 نشر إعلان جديد</h3>
                 <form action="/admin/add-announcement" method="POST" enctype="multipart/form-data">
@@ -490,7 +505,6 @@ app.post('/admin-dashboard', async (req, res) => {
                 </form>
             </div>
 
-            <!-- اختيار نجم الشهر -->
             <div class="admin-section">
                 <h3>⭐ اختيار نجم الشهر</h3>
                 <form action="/admin/set-star" method="POST">
@@ -502,7 +516,6 @@ app.post('/admin-dashboard', async (req, res) => {
                 </form>
             </div>
 
-            <!-- إدارة المسابقات -->
             <div class="admin-section">
                 <h3>🏆 إدارة المسابقات</h3>
                 <form action="/admin/add-competition" method="POST">
@@ -513,7 +526,7 @@ app.post('/admin-dashboard', async (req, res) => {
                 </form>
             </div>
 
-            <!-- الشكايات -->
+            <!-- الشكايات مع أزرار المعالجة والحذف -->
             <div class="admin-section">
                 <h3>📩 الشكايات والملاحظات الواردة</h3>
                 <table>
@@ -522,6 +535,8 @@ app.post('/admin-dashboard', async (req, res) => {
                             <th>المتدرب</th>
                             <th>القسم</th>
                             <th>الشكاية</th>
+                            <th>الحالة</th>
+                            <th>الإجراءات</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -530,6 +545,19 @@ app.post('/admin-dashboard', async (req, res) => {
                                 <td>${c.senderName} (${c.senderCin})</td>
                                 <td>${c.group}</td>
                                 <td>${c.text}</td>
+                                <td><span style="color:${c.status === 'قيد المراجعة' ? '#d97706' : '#059669'}; font-weight:bold;">${c.status}</span></td>
+                                <td>
+                                    ${c.status === 'قيد المراجعة' ? `
+                                        <form action="/admin/complaint/review" method="POST" style="display:inline;">
+                                            <input type="hidden" name="id" value="${c._id}">
+                                            <button type="submit" class="btn btn-success" style="padding:4px 8px; font-size:12px;">قبول ومعالجة</button>
+                                        </form>
+                                    ` : ''}
+                                    <form action="/admin/complaint/delete" method="POST" style="display:inline;">
+                                        <input type="hidden" name="id" value="${c._id}">
+                                        <button type="submit" class="btn btn-danger" style="padding:4px 8px; font-size:12px;">حذف</button>
+                                    </form>
+                                </td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -562,9 +590,9 @@ app.post('/admin-dashboard', async (req, res) => {
   `);
 });
 
-// المسارات الخاصة بالإجراءات الإدارية
+// المسارات الخاصة بالإجراءات الإدارية والشكايات
 app.post('/admin/add-announcement', upload.single('annImage'), async (req, res) => {
-  const { text, adminPass } = req.body;
+  const { text } = req.body;
   await Announcement.create({
     text,
     image: req.file ? req.file.path : ''
@@ -573,7 +601,7 @@ app.post('/admin/add-announcement', upload.single('annImage'), async (req, res) 
 });
 
 app.post('/admin/set-star', async (req, res) => {
-  const { cin, adminPass } = req.body;
+  const { cin } = req.body;
   await Settings.findOneAndUpdate(
     { key: 'star' },
     { starCin: cin },
@@ -583,26 +611,39 @@ app.post('/admin/set-star', async (req, res) => {
 });
 
 app.post('/admin/add-competition', async (req, res) => {
-  const { title, result, adminPass } = req.body;
+  const { title, result } = req.body;
   await Competition.create({ title, result });
   res.redirect(307, '/admin-dashboard');
 });
 
 app.post('/admin/update-rank', async (req, res) => {
-  const { cin, rank, adminPass } = req.body;
+  const { cin, rank } = req.body;
   await User.findOneAndUpdate({ cin }, { rank });
   res.redirect(307, '/admin-dashboard');
 });
 
 app.post('/admin/accept', async (req, res) => {
-  const { cin, adminPass } = req.body;
+  const { cin } = req.body;
   await User.findOneAndUpdate({ cin }, { status: 'accepted' });
   res.redirect(307, '/admin-dashboard');
 });
 
 app.post('/admin/delete', async (req, res) => {
-  const { cin, adminPass } = req.body;
+  const { cin } = req.body;
   await User.findOneAndDelete({ cin });
+  res.redirect(307, '/admin-dashboard');
+});
+
+// مسارات إدارة الشكايات (قبول وحذف)
+app.post('/admin/complaint/review', async (req, res) => {
+  const { id } = req.body;
+  await Complaint.findByIdAndUpdate(id, { status: 'تمت معالجة شكايتك من طرف اللجنة' });
+  res.redirect(307, '/admin-dashboard');
+});
+
+app.post('/admin/complaint/delete', async (req, res) => {
+  const { id } = req.body;
+  await Complaint.findByIdAndDelete(id);
   res.redirect(307, '/admin-dashboard');
 });
 
