@@ -176,7 +176,7 @@ app.get('/register', (req, res) => {
                 <label>رقم بطاقة التعريف الوطنية (CIN):</label>
                 <input type="text" name="cin" placeholder="مثال: AB123456" required>
                 
-                <label>صورة بطاقة المتدرب أو الـ PNJ:</label>
+                <label>صورة المتدرب  :</label>
                 <input type="file" name="pnj" accept="image/*" required>
                 
                 <label>القسم / الشعبة:</label>
@@ -392,7 +392,7 @@ app.get('/admin-login', (req, res) => {
 // 6. لوحة تحكم المشرفين مع ميزة البحث المباشر
 app.post('/admin-dashboard', async (req, res) => {
   const { adminPass } = req.body;
-  if (adminPass !== 'cad2026') {
+  if (adminPass !== 'caddac@2004') {
     return res.send(`<script>alert('كلمة المرور غير صحيحة!'); window.location.href='/admin-login';</script>`);
   }
 
